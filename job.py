@@ -33,9 +33,9 @@ def makejob(
     params,
 ):
     paramsstr = " ".join([f"--{name} {value}" for name, value in params.items()])
-    return f"""#!/bin/bash
+    return f"""#!/bin/bash 
 
-#SBATCH --job-name=semseg-{params['model']}
+#SBATCH --job-name=semseg-{params['loss']}
 #SBATCH --nodes=1
 #SBATCH --partition={partition}
 #SBATCH --time={walltime}
@@ -45,46 +45,34 @@ def makejob(
 
 current_dir=`pwd`
 
-# Fix env variables as bashrc and profile are not loaded
-export LOCAL=$HOME/.local
-export PATH=$PATH:$LOCAL/bin
-
-echo "Session " {params['model']}_${{SLURM_ARRAY_JOB_ID}}_${{SLURM_ARRAY_TASK_ID}}
-date
-
-echo "Running on $(hostname)"
-# env
+echo "Session " {model}_${{SLURM_ARRAY_JOB_ID}}_${{SLURM_ARRAY_TASK_ID}}
 
 echo "Copying the source directory and data"
 date
-mkdir $TMPDIR/lw_deeplearning_semantic
-cd ../../
-rsync -r . $TMPDIR/lw_deeplearning_semantic/ --exclude 'logs'  --exclude 'logslurms'
+mkdir $TMPDIR/semseg
+rsync -r . $TMPDIR/semseg/
 
-cd $TMPDIR/lw_deeplearning_semantic
-cd LabsSolutions/01-pytorch-segmentation
-
-ls 
-
+echo "Checking out the correct version of the code commit_id {commit_id}"
+cd $TMPDIR/semseg/
 git checkout {commit_id}
 
-echo ""
-echo "Conda virtual env"
 
-export PATH=/opt/conda/bin:$PATH
-source activate dl-lectures-segmentation
+echo "Setting up the virtual environment"
+python3 -m pip install virtualenv --user
+virtualenv -p python3 venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
 
-
-echo ""
 echo "Training"
-date
-
 python main.py train --datadir /mounts/Datasets4/Stanford2D-3D-S/ {paramsstr} --logname {params['model']}_${{SLURM_ARRAY_JOB_ID}}_${{SLURM_ARRAY_TASK_ID}} --commit_id '{commit_id}' --logdir ${{current_dir}}/logs
 
 if [[ $? != 0 ]]; then
     exit -1
 fi
-date
+
+# Once the job is finished, you can copy back back
+# files from $TMPDIR/semseg to $current_dir
+cp -R $TMPDIR/semseg $current_dir/test
 """
 
 
